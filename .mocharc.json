@@ -1,0 +1,12 @@
+{
+  "require": ["@babel/register"],
+  "spec": ["tests/**/*.test.js"],
+  "timeout": 300000,
+  "exit": true,
+  "reporter": "spec",
+  "slow": 10000,
+  "bail": false,
+  "color": true,
+  "recursive": true
+}
+

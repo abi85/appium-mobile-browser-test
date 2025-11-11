@@ -1,0 +1,40 @@
+{
+  "name": "appium-mobile-browser-test",
+  "version": "1.0.0",
+  "description": "Appium test automation framework for mobile browser testing with Page Object Model",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --require @babel/register --timeout 300000 --exit",
+    "test:ios": "PLATFORM=ios mocha --require @babel/register --timeout 300000 --exit",
+    "test:android": "PLATFORM=android mocha --require @babel/register --timeout 300000 --exit",
+    "test:parallel": "mocha --require @babel/register --timeout 300000 --parallel --exit",
+    "test:report": "mocha --require @babel/register --timeout 300000 --reporter mochawesome --reporter-options reportDir=reports,reportFilename=test-report --exit"
+  },
+  "keywords": [
+    "appium",
+    "mobile",
+    "automation",
+    "testing",
+    "javascript",
+    "page-object-model"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "appium": "^2.2.1",
+    "webdriverio": "^8.24.0",
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0",
+    "mochawesome": "^7.1.3",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.5",
+    "@babel/preset-env": "^7.23.5",
+    "@babel/register": "^7.22.15",
+    "eslint": "^8.54.0"
+  }
+}
+
