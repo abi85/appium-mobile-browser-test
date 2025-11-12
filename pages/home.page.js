@@ -4,72 +4,100 @@ import { testUrls } from '../test-data/credentials.js';
 
 /**
  * Home Page Object
- * Handles all home/dashboard page interactions following Page Object Model pattern
+ * Implements Page Object Model for Home/Dashboard page after successful login
+ * Following Single Responsibility Principle - handles only home page interactions
+ * Extends BasePage for common functionality
  */
+
 export class HomePage extends BasePage {
   constructor(driver) {
     super(driver);
     this.url = testUrls.baseUrl;
   }
 
-  // Element Selectors (using getters for fresh references)
-  get userProfile() {
-    return this.driver.$('[class*="profile"], [class*="user"], [class*="account"], a[href*="account"], a[href*="profile"]');
+  /**
+   * Page Element Selectors
+   * Using getter methods to ensure fresh element references
+   */
+  
+  get myContentLink() {
+    return this.driver.$('a*=My Content');
   }
 
-  get logoutButton() {
-    return this.driver.$('a*=Sign out');
-  }
-
-  get welcomeMessage() {
-    return this.driver.$('[class*="welcome"], h1, h2, [class*="greeting"]');
-  }
-
-  get navigationMenu() {
-    return this.driver.$('nav, [role="navigation"], [class*="nav"], [class*="menu"]');
-  }
-
-  get userAvatar() {
-    return this.driver.$('[class*="avatar"], img[alt*="profile" i], img[alt*="user" i]');
+  get signOutButton() {
+    return this.driver.$('a*=Sign Out');
   }
 
   get accountLink() {
-    return this.driver.$('a[href*="My Account"]');
+    return this.driver.$('a*=My Account');
   }
 
-
-  // Navigation Actions
-  async navigateToAccount() {
-    await this.executeWithErrorHandling('navigate to account page', async () => {
-      await this.click(await this.accountLink, 'Account link');
-      TestLogger.info('Navigated to account page');
-    });
-  }
-
-  // User Actions
-  async clickUserProfile() {
-    await this.executeWithErrorHandling('click user profile', async () => {
-      await this.click(await this.userProfile, 'User profile');
-      TestLogger.info('User profile clicked');
-    });
-  }
-
-  async logout() {
-    await this.executeWithErrorHandling('logout', async () => {
-      TestLogger.step('Attempting to logout');
+  /**
+   * Wait for home page to load
+   */
+  async waitForHomePageLoad() {
+    try {
+      await this.waitHelper.waitForPageLoad();
       
-      if (await this.isExisting(await this.logoutButton)) {
-        await this.click(await this.logoutButton, 'Logout button');
-      } else {
-        await this.logoutViaProfile();
-      }
+      // Wait for page to fully load by checking URL doesn't contain 'login'
+      await this.driver.waitUntil(
+        async () => {
+          const currentUrl = await this.getCurrentUrl();
+          return !currentUrl.includes('login');
+        },
+        {
+          timeout: this.timeout,
+          timeoutMsg: 'Home page did not load within timeout',
+        }
+      );
       
-      await this.waitForLogoutRedirect();
-      TestLogger.info('Logout successful');
-    });
+      TestLogger.info('Home page loaded successfully');
+    } catch (error) {
+      TestLogger.error('Home page failed to load', error);
+      throw error;
+    }
   }
 
-  // Page State Checks
+  /**
+   * Assert user is logged in and on home page
+   */
+  async assertSuccessfulLogin() {
+    try {
+      await this.waitForHomePageLoad();
+      
+      const currentUrl = await this.getCurrentUrl();
+      
+      // Assert URL does not contain 'login'
+      this.assertHelper.assertFalse(
+        currentUrl.includes('login'),
+        'User is redirected away from login page'
+      );
+      
+      // Check for user profile or account indicators
+      const myContentExists = await this.isExisting(await this.myContentLink);
+      const accountLinkExists = await this.isExisting(await this.accountLink);
+      const signOutButtonExists = await this.isExisting(await this.signOutButton);
+      
+      const isLoggedIn = myContentExists || accountLinkExists || signOutButtonExists;
+      
+      this.assertHelper.assertTrue(
+        isLoggedIn,
+        'User is successfully logged in (profile/account elements present)'
+      );
+      
+      TestLogger.info('Successful login assertion passed');
+      await this.takeScreenshot('successful-login');
+    } catch (error) {
+      TestLogger.error('Successful login assertion failed', error);
+      await this.takeScreenshot('login-assertion-failure');
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user is logged in
+   * @returns {Promise<boolean>} True if user is logged in
+   */
   async isUserLoggedIn() {
     try {
       const currentUrl = await this.getCurrentUrl();
@@ -78,131 +106,84 @@ export class HomePage extends BasePage {
         return false;
       }
       
-      const profileExists = await this.isExisting(await this.userProfile);
+      const myContentExists = await this.isExisting(await this.myContentLink);
       const accountLinkExists = await this.isExisting(await this.accountLink);
       
-      return profileExists || accountLinkExists;
+      return myContentExists || accountLinkExists;
     } catch (error) {
       TestLogger.error('Failed to check login status', error);
       return false;
     }
   }
 
-  // Get Information
-  async getWelcomeMessage() {
+
+  /**
+   * Click on user profile
+   */
+  async clickUserProfile() {
     try {
-      const welcomeElement = await this.welcomeMessage;
-      if (await this.isDisplayed(welcomeElement)) {
-        return await this.getText(welcomeElement);
-      }
-      return '';
+      const profile = await this.myContentLink;
+      await this.click(profile, 'User profile');
+      TestLogger.info('User profile clicked');
     } catch (error) {
-      TestLogger.warn('Welcome message not found');
-      return '';
+      TestLogger.error('Failed to click user profile', error);
+      throw error;
     }
   }
 
-  async getPageContent() {
+  /**
+   * Logout from application
+   */
+  async logout() {
     try {
-      const content = await this.dashboardContent;
-      if (await this.isDisplayed(content)) {
-        return await this.getText(content);
+      TestLogger.step('Attempting to logout');
+      
+      // Try to find and click logout button
+      const logoutBtn = await this.signOutButton;
+      
+      if (await this.isExisting(logoutBtn)) {
+        await this.click(logoutBtn, 'Logout button');
+      } else {
+        // If logout button not visible, try clicking profile first
+        await this.clickUserProfile();
+        await this.waitHelper.pause(1000);
+        const logoutBtnRetry = await this.signOutButton;
+        await this.click(logoutBtnRetry, 'Logout button');
       }
-      return '';
+      
+      // Wait for redirect to login page
+      await this.driver.waitUntil(
+        async () => {
+          const currentUrl = await this.getCurrentUrl();
+          return currentUrl.includes('login');
+        },
+        {
+          timeout: 10000,
+          timeoutMsg: 'Did not redirect to login page after logout',
+        }
+      );
+      
+      TestLogger.info('Logout successful');
     } catch (error) {
-      TestLogger.error('Failed to get page content', error);
-      return '';
+      TestLogger.error('Logout failed', error);
+      throw error;
     }
   }
 
-  // Assertions
-  async assertSuccessfulLogin() {
-    await this.executeWithErrorHandling('assert successful login', async () => {
-      await this.waitForHomePageLoad();
-      
-      const currentUrl = await this.getCurrentUrl();
-      this.assertHelper.assertFalse(
-        currentUrl.includes('login'),
-        'User is redirected away from login page'
-      );
-      
-      const isLoggedIn = await this.checkLoginIndicators();
-      this.assertHelper.assertTrue(
-        isLoggedIn,
-        'User is successfully logged in (profile/account elements present)'
-      );
-      
-      TestLogger.info('Successful login assertion passed');
-      await this.takeScreenshot('successful-login');
-    }, 'login-assertion-failure');
-  }
-
-  async assertNavigationVisible() {
-    await this.executeWithErrorHandling('assert navigation visible', async () => {
-      await this.assertHelper.assertDisplayed(
-        await this.navigationMenu,
-        'Navigation menu'
-      );
-      TestLogger.info('Navigation menu visibility assertion passed');
-    });
-  }
-
-  // Private Helper Methods
-  async waitForHomePageLoad() {
-    await this.waitHelper.waitForPageLoad();
-    
-    await this.driver.waitUntil(
-      async () => {
-        const currentUrl = await this.getCurrentUrl();
-        return !currentUrl.includes('login');
-      },
-      {
-        timeout: this.timeout,
-        timeoutMsg: 'Home page did not load within timeout',
-      }
-    );
-    
-    TestLogger.info('Home page loaded successfully');
-  }
-
-  async checkLoginIndicators() {
-    const profileExists = await this.isExisting(await this.userProfile);
-    const accountLinkExists = await this.isExisting(await this.accountLink);
-    const dashboardExists = await this.isExisting(await this.dashboardContent);
-    
-    return profileExists || accountLinkExists || dashboardExists;
-  }
-
-  async logoutViaProfile() {
-    await this.clickUserProfile();
-    await this.waitHelper.pause(1000);
-    await this.click(await this.logoutButton, 'Logout button');
-  }
-
-  async waitForLogoutRedirect() {
-    await this.driver.waitUntil(
-      async () => {
-        const currentUrl = await this.getCurrentUrl();
-        return currentUrl.includes('login');
-      },
-      {
-        timeout: 10000,
-        timeoutMsg: 'Did not redirect to login page after logout',
-      }
-    );
-  }
-
-  async executeWithErrorHandling(actionName, action, screenshotSuffix = null) {
+  /**
+   * Navigate to account page
+   */
+  async navigateToAccount() {
     try {
-      await action();
+      const accountLnk = await this.accountLink;
+      await this.click(accountLnk, 'Account link');
+      TestLogger.info('Navigated to account page');
     } catch (error) {
-      TestLogger.error(`Failed to ${actionName}`, error);
-      if (screenshotSuffix) {
-        await this.takeScreenshot(screenshotSuffix);
-      }
+      TestLogger.error('Failed to navigate to account page', error);
       throw error;
     }
   }
 }
 
 export default HomePage;
+
